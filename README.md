@@ -4,6 +4,8 @@
 - `route-service` — расчёт маршрутов, WildFly, порт `8081`;
 - `client-app` — React-клиент, порт `5173`.
 
+API: [openapi.yaml](./openapi.yaml)
+
 ## Окружение
 
 ```powershell
