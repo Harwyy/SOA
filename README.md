@@ -4,7 +4,9 @@
 - `route-service` — расчёт маршрутов, WildFly, порт `8081`;
 - `client-app` — React-клиент, порт `5173`.
 
-API: [openapi.yaml](./openapi.yaml)
+API: [документация](https://harwyy.github.io/SOA/) · [openapi.yaml](./openapi.yaml)
+
+Для публикации выбрать в GitHub: `Settings → Pages → Deploy from a branch → main /docs`.
 
 ## Окружение
 
