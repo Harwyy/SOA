@@ -55,12 +55,12 @@ mvn clean package
 Pop-Location
 
 & "$env:PAYARA_HOME\bin\asadmin.bat" deploy `
-  --force=true `
+  --upload=true `
   "$PWD\city-service\target\city-service.war"
 ```
 
-Перед развёртыванием Payara должен быть запущен и настроен скриптом
-`scripts/configure-payara.ps1`.
+Перед развёртыванием Payara должен быть запущен и настроен командами из
+корневого `README.md`.
 
 ## Конфигурация
 

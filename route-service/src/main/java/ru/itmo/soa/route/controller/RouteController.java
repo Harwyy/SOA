@@ -21,13 +21,13 @@ public class RouteController {
     public ResponseEntity<RouteResponse> toLargest() {
         return routeService.calculateToLargest()
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.<RouteResponse>noContent().build());
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @GetMapping("/to-oldest")
     public ResponseEntity<RouteResponse> toOldest() {
         return routeService.calculateToOldest()
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.<RouteResponse>noContent().build());
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 }
