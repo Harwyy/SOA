@@ -1,0 +1,685 @@
+openapi: 3.1.0
+info:
+  title: City Collection API
+  description: |
+    REST API для управления коллекцией городов и расчёта маршрутов.
+    Первый сервис реализуется на JAX-RS и разворачивается на Payara.
+    Второй сервис реализуется на Spring MVC REST, разворачивается на WildFly
+    и вызывает первый сервис по HTTP в локальной конфигурации.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/city-service
+    description: JAX-RS сервис на Payara для локального запуска.
+
+x-deployment:
+  transport: HTTP
+  httpAllowed: true
+  certificate: Не используется в локальном режиме
+  firstService:
+    framework: JAX-RS
+    applicationServer: Payara
+    baseUrl: http://localhost:8080/city-service
+  secondService:
+    framework: Spring MVC REST
+    applicationServer: WildFly
+    baseUrl: http://localhost:8081/route
+
+tags:
+  - name: Cities
+    description: Первый веб-сервис — JAX-RS на Payara
+  - name: Routes
+    description: Второй веб-сервис — Spring MVC REST на WildFly
+
+paths:
+  /cities:
+    get:
+      tags: [Cities]
+      operationId: listCities
+      summary: Получить коллекцию городов
+      description: |
+        Возвращает массив городов. Фильтры объединяются условием AND.
+        Параметр sort можно передавать несколько раз; порядок параметров задаёт
+        приоритет сортировки. Формат каждого значения sort: field,direction,
+        где direction — asc или desc.
+      parameters:
+        - $ref: '#/components/parameters/FilterId'
+        - $ref: '#/components/parameters/FilterName'
+        - $ref: '#/components/parameters/FilterCreationDate'
+        - $ref: '#/components/parameters/FilterArea'
+        - $ref: '#/components/parameters/FilterPopulation'
+        - $ref: '#/components/parameters/FilterMetersAboveSeaLevel'
+        - $ref: '#/components/parameters/FilterEstablishmentDate'
+        - $ref: '#/components/parameters/FilterCapital'
+        - $ref: '#/components/parameters/FilterClimate'
+        - $ref: '#/components/parameters/FilterCoordinatesX'
+        - $ref: '#/components/parameters/FilterCoordinatesY'
+        - $ref: '#/components/parameters/FilterGovernorBirthday'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Массив городов, соответствующих заданным условиям
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+        '204':
+          description: Коллекция пуста или на указанной странице нет элементов
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+    post:
+      tags: [Cities]
+      operationId: createCity
+      summary: Добавить город
+      description: Идентификатор и дата создания генерируются сервисом автоматически.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityInput'
+      responses:
+        '201':
+          description: Город создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/City'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+
+  /cities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/CityId'
+    get:
+      tags: [Cities]
+      operationId: getCity
+      summary: Получить город по ID
+      responses:
+        '200':
+          description: Город найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/City'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/CityNotFound'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+    put:
+      tags: [Cities]
+      operationId: updateCity
+      summary: Обновить город
+      description: Полностью заменяет изменяемые поля города. ID и дата создания сохраняются.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityInput'
+      responses:
+        '200':
+          description: Город обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/City'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '404':
+          $ref: '#/components/responses/CityNotFound'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+
+    delete:
+      tags: [Cities]
+      operationId: deleteCity
+      summary: Удалить город
+      responses:
+        '204':
+          description: Город удалён
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/CityNotFound'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+  /cities/by-meters-above-sea-level:
+    delete:
+      tags: [Cities]
+      operationId: deleteCitiesByMetersAboveSeaLevel
+      summary: Удалить все города с заданной высотой
+      description: Удаляет все города, у которых metersAboveSeaLevel равно заданному значению.
+      parameters:
+        - $ref: '#/components/parameters/MetersAboveSeaLevelRequired'
+      responses:
+        '204':
+          description: Все подходящие города удалены
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Городов с заданной высотой нет
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+  /cities/by-establishment-date:
+    delete:
+      tags: [Cities]
+      operationId: deleteOneCityByEstablishmentDate
+      summary: Удалить один город с заданной датой основания
+      description: Удаляет любой один город, у которого establishmentDate равно заданному значению.
+      parameters:
+        - $ref: '#/components/parameters/EstablishmentDateRequired'
+      responses:
+        '204':
+          description: Один подходящий город удалён
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Города с заданной датой основания нет
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+  /cities/average-meters-above-sea-level:
+    get:
+      tags: [Cities]
+      operationId: calculateAverageMetersAboveSeaLevel
+      summary: Рассчитать среднюю высоту городов
+      responses:
+        '200':
+          description: Среднее значение metersAboveSeaLevel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AverageMetersAboveSeaLevel'
+        '204':
+          description: В коллекции нет городов со значением metersAboveSeaLevel
+        '503':
+          $ref: '#/components/responses/StorageUnavailable'
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+
+  /route/calculate/to-largest:
+    servers:
+      - url: http://localhost:8081
+        description: Spring MVC REST сервис на WildFly для локального запуска.
+    get:
+      tags: [Routes]
+      operationId: calculateRouteToLargestCity
+      summary: Рассчитать длину маршрута до города с наибольшей площадью
+      description: Второй сервис получает данные о городах через API первого сервиса.
+      responses:
+        '200':
+          description: Длина маршрута до города с максимальным значением area
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResult'
+        '204':
+          description: В коллекции нет городов, до которых можно рассчитать маршрут
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /route/calculate/to-oldest:
+    servers:
+      - url: http://localhost:8081
+        description: Spring MVC REST сервис на WildFly для локального запуска.
+    get:
+      tags: [Routes]
+      operationId: calculateRouteToOldestCity
+      summary: Рассчитать длину маршрута до самого старого города
+      description: Рассчитывает маршрут от точки (0,0,0) до города, основанного раньше остальных.
+      responses:
+        '200':
+          description: Длина маршрута до города с минимальным establishmentDate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResult'
+        '204':
+          description: В коллекции нет городов с заданной датой основания
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+        '406':
+          $ref: '#/components/responses/NotAcceptable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+components:
+  parameters:
+    CityId:
+      name: id
+      in: path
+      required: true
+      description: Уникальный идентификатор города
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+
+    FilterId:
+      name: id
+      in: query
+      description: Точное совпадение с идентификатором
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+    FilterName:
+      name: name
+      in: query
+      description: Поиск городов, название которых начинается с указанной строки, без учёта регистра
+      schema:
+        type: string
+        minLength: 1
+    FilterCreationDate:
+      name: creationDate
+      in: query
+      description: Точное совпадение с датой создания в формате RFC 3339
+      schema:
+        type: string
+        format: date-time
+    FilterArea:
+      name: area
+      in: query
+      description: Точное совпадение с площадью
+      schema:
+        type: number
+        format: float
+        exclusiveMinimum: 0
+    FilterPopulation:
+      name: population
+      in: query
+      description: Точное совпадение с населением
+      schema:
+        type: integer
+        format: int32
+        exclusiveMinimum: 0
+    FilterMetersAboveSeaLevel:
+      name: metersAboveSeaLevel
+      in: query
+      description: Точное совпадение с высотой над уровнем моря
+      schema:
+        type: number
+        format: double
+    FilterEstablishmentDate:
+      name: establishmentDate
+      in: query
+      description: Точное совпадение с локальной датой и временем основания
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$'
+        example: '2020-01-01T12:00:00'
+    FilterCapital:
+      name: capital
+      in: query
+      description: Фильтр по признаку столицы
+      schema:
+        type: boolean
+    FilterClimate:
+      name: climate
+      in: query
+      description: Фильтр по климату
+      schema:
+        $ref: '#/components/schemas/Climate'
+    FilterCoordinatesX:
+      name: coordinates.x
+      in: query
+      description: Точное совпадение с координатой X
+      schema:
+        type: integer
+        format: int64
+    FilterCoordinatesY:
+      name: coordinates.y
+      in: query
+      description: Точное совпадение с координатой Y
+      schema:
+        type: number
+        format: float
+        maximum: 952
+    FilterGovernorBirthday:
+      name: governor.birthday
+      in: query
+      description: Точное совпадение с датой рождения губернатора
+      schema:
+        type: string
+        format: date-time
+    Sort:
+      name: sort
+      in: query
+      description: |
+        Поле и направление сортировки в формате field,direction.
+        Поддерживаемые поля: id, name, creationDate, area, population,
+        metersAboveSeaLevel, establishmentDate, capital, climate,
+        coordinates.x, coordinates.y, governor.birthday.
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          pattern: '^(id|name|creationDate|area|population|metersAboveSeaLevel|establishmentDate|capital|climate|coordinates\.x|coordinates\.y|governor\.birthday),(asc|desc)$'
+      example: ['area,desc', 'name,asc']
+    Page:
+      name: page
+      in: query
+      description: Порядковый номер страницы, начиная с 1
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Size:
+      name: size
+      in: query
+      description: Количество элементов на странице
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    MetersAboveSeaLevelRequired:
+      name: metersAboveSeaLevel
+      in: query
+      required: true
+      description: Значение высоты над уровнем моря для удаления
+      schema:
+        type: number
+        format: double
+    EstablishmentDateRequired:
+      name: establishmentDate
+      in: query
+      required: true
+      description: Дата и время основания для удаления
+      schema:
+        type: string
+        pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$'
+        example: '2020-01-01T12:00:00'
+
+  schemas:
+    City:
+      type: object
+      description: Город в коллекции.
+      required: [id, name, coordinates, creationDate, area, population, capital]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          readOnly: true
+          x-generated: true
+          x-unique: true
+          description: Уникальный идентификатор, генерируемый автоматически.
+        name:
+          type: string
+          minLength: 1
+          description: Название города.
+        coordinates:
+          $ref: '#/components/schemas/Coordinates'
+        creationDate:
+          type: string
+          format: date-time
+          readOnly: true
+          x-generated: true
+          description: Дата создания, генерируемая автоматически.
+        area:
+          type: number
+          format: float
+          exclusiveMinimum: 0
+          description: Площадь города, строго больше 0.
+        population:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+          description: Население, строго больше 0.
+        metersAboveSeaLevel:
+          type: [number, 'null']
+          format: double
+          description: Высота над уровнем моря.
+        establishmentDate:
+          type: [string, 'null']
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$'
+          example: '2020-01-01T12:00:00'
+          description: Локальная дата и время основания.
+        capital:
+          type: boolean
+          description: Является ли город столицей.
+        climate:
+          anyOf:
+            - $ref: '#/components/schemas/Climate'
+            - type: 'null'
+          description: Климат города.
+        governor:
+          anyOf:
+            - $ref: '#/components/schemas/Human'
+            - type: 'null'
+          description: Губернатор города.
+
+    CityInput:
+      type: object
+      description: Данные города для создания или полного обновления.
+      required: [name, coordinates, area, population]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        coordinates:
+          $ref: '#/components/schemas/Coordinates'
+        area:
+          type: number
+          format: float
+          exclusiveMinimum: 0
+        population:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        metersAboveSeaLevel:
+          type: [number, 'null']
+          format: double
+        establishmentDate:
+          type: [string, 'null']
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$'
+          example: '2020-01-01T12:00:00'
+        capital:
+          type: boolean
+          default: false
+          description: Является ли город столицей.
+        climate:
+          anyOf:
+            - $ref: '#/components/schemas/Climate'
+            - type: 'null'
+        governor:
+          anyOf:
+            - $ref: '#/components/schemas/Human'
+            - type: 'null'
+
+    Coordinates:
+      type: object
+      description: Координаты города.
+      required: [x, y]
+      properties:
+        x:
+          type: integer
+          format: int64
+          description: Координата X, не может быть null.
+        y:
+          type: number
+          format: float
+          maximum: 952
+          description: Координата Y, максимальное значение 952.
+
+    Human:
+      type: object
+      description: Губернатор города.
+      properties:
+        birthday:
+          type: [string, 'null']
+          format: date-time
+          description: Дата и время рождения.
+
+    Climate:
+      type: string
+      enum: [RAIN_FOREST, TROPICAL_SAVANNA, HUMIDCONTINENTAL]
+
+    AverageMetersAboveSeaLevel:
+      type: object
+      description: Среднее значение metersAboveSeaLevel по объектам, у которых поле задано.
+      required: [averageMetersAboveSeaLevel]
+      properties:
+        averageMetersAboveSeaLevel:
+          type: number
+          format: double
+
+    RouteResult:
+      type: object
+      required: [length, cityId]
+      properties:
+        length:
+          type: number
+          format: double
+          minimum: 0
+          description: Длина рассчитанного маршрута.
+        cityId:
+          type: integer
+          format: int32
+          minimum: 1
+          description: ID города, до которого рассчитан маршрут.
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          format: int32
+          description: HTTP-код ошибки.
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+
+  responses:
+    BadRequest:
+      description: Некорректный параметр запроса.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Данные нарушают ограничения целостности класса.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Операция нарушает ограничение целостности базы данных.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    CityNotFound:
+      description: Город с указанным ID не найден.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    StorageUnavailable:
+      description: Хранилище коллекции временно недоступно.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    MethodNotAllowed:
+      description: HTTP-метод не поддерживается для этого ресурса.
+      headers:
+        Allow:
+          description: Список поддерживаемых методов.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotAcceptable:
+      description: Запрошенный формат ответа не поддерживается.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadGateway:
+      description: Второй сервис не получил корректный ответ от первого сервиса.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnsupportedMediaType:
+      description: Поддерживается только application/json.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
