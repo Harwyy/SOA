@@ -1,0 +1,13 @@
+# Java/Maven
+**/target/
+*.class
+
+# React/Vite
+**/node_modules/
+client-react/dist/
+
+# IDE and operating system files
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
