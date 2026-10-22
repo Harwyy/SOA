@@ -15,12 +15,26 @@ export class ApiError extends Error {
 async function request(baseUrl, path, options = {}) {
   let response;
   try {
-    response = await fetch(`${baseUrl}${path}`, {
-      ...options,
+    const usesPhpProxy = baseUrl.includes('?');
+    const requestedMethod = String(options.method || 'GET').toUpperCase();
+    // The university's public_html web server rejects PUT and DELETE before
+    // they reach PHP. Send these cases as POST to our same-origin proxy;
+    // api.php restores only the original method for the application upstream.
+    const proxyMethodOverride = usesPhpProxy && ['PUT', 'DELETE'].includes(requestedMethod)
+      ? requestedMethod
+      : null;
+    const { method, headers: optionHeaders, ...fetchOptions } = options;
+    const url = usesPhpProxy
+      ? `${baseUrl}&path=${encodeURIComponent(path)}`
+      : `${baseUrl}${path}`;
+    response = await fetch(url, {
+      ...fetchOptions,
+      ...(method ? { method: proxyMethodOverride ? 'POST' : method } : {}),
       headers: {
         Accept: 'application/json',
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(options.headers || {})
+        ...(proxyMethodOverride ? { 'X-HTTP-Method-Override': proxyMethodOverride } : {}),
+        ...(optionHeaders || {})
       }
     });
   } catch (error) {

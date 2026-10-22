@@ -13,7 +13,7 @@ public class RouteWebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins("http://localhost:5500")
+                .allowedOrigins("http://localhost:5500", "https://se.ifmo.ru")
                 .allowedMethods("GET", "OPTIONS")
                 .allowedHeaders("Content-Type", "Accept");
     }

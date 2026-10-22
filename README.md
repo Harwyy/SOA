@@ -1,168 +1,159 @@
-# SOA — лабораторная работа 1
+# SOA — запуск на Helios
 
-Проект состоит из трёх приложений:
+## Схема развёртывания
 
-| Приложение | Каталог | Назначение | Результат сборки |
-| --- | --- | --- | --- |
-| City service | `city-service` | JAX-RS API коллекции городов для Payara | `city-service/target/city-service-1.0.0.war` |
-| Route service | `route-service` | Spring MVC REST API маршрутов для WildFly; вызывает City service | `route-service/target/route-service-1.0.0.war` |
-| Client | `client-react` | React-интерфейс для обоих API | `client-react/dist/` |
+Сервисы запускаются на разных аккаунтах. Общий скрипт `start-services.sh` не используй: он рассчитан на Payara и WildFly в одном аккаунте.
 
-Все Java-исходники компилируются в формате **Java 17**. Версия Java новее допустима для локальной сборки, однако результат останется совместимым с Java 17.
+| Сервис | Аккаунт | HTTPS-адрес |
+| --- | --- | --- |
+| City service (Payara) | `s373336` | `https://helios.se.ifmo.ru:18081/city-service` |
+| Route service (WildFly) | `s368420` | `https://helios.se.ifmo.ru:20000/route-service` |
+| UI | `s368420` | `https://se.ifmo.ru/~s368420/` |
 
-## Что хранить в Git
+Внешний доступ к портам сервисов может быть закрыт. Это нормально: UI обращается к API через `api.php` на том же домене. Проверяй API через SSH с аккаунта, где работает сервис.
 
-В репозиторий добавляются исходники, `openapi.yaml`, `pom.xml`, `package.json`, `package-lock.json` и папка `scripts`. Папки `target`, `node_modules` и `dist` не добавляются: они пересоздаются командами ниже и уже исключены в `.gitignore`.
+## Файлы на сервере
 
-Перед первым коммитом можно удалить ранее собранные файлы:
+WAR-архивы собираются на ноутбуке, не на Helios. Перед запуском должны существовать:
 
-```powershell
-Remove-Item -Recurse -Force .\city-service\target, .\route-service\target, .\client-react\node_modules, .\client-react\dist -ErrorAction SilentlyContinue
+| Домашняя папка | Файлы |
+| --- | --- |
+| `/home/studs/s373336` | `city-service-1.0.0.war`, `scripts/linux/` |
+| `/home/studs/s368420` | `route-service-1.0.0.war`, `city-service.pem`, `scripts/linux/` |
+
+`city-service.pem` — сертификат City service, нужный WildFly для HTTPS-вызовов. Не удаляй его.
+
+## 1. City service: Payara
+
+```bash
+ssh s373336@helios.se.ifmo.ru -p 2222
+cd /home/studs/s373336/scripts/linux
 ```
 
-Если репозиторий ещё не создан, минимальная последовательность такая:
+В `config.local.sh` должны быть значения:
 
-```powershell
-git init
-git add .
-git status
-git commit -m "SOA laboratory work 1"
+```bash
+PAYARA_HOME="/home/studs/s373336/payara6"
+PAYARA_DOMAIN="soa"
+PAYARA_ADMIN_PORT="18048"
+CITY_SERVICE_HOST="helios.se.ifmo.ru"
+CITY_SERVICE_PORT="18081"
+CITY_WAR_RELATIVE_PATH="city-service-1.0.0.war"
+CERTIFICATE_DNS_NAME="helios.se.ifmo.ru"
+CERTIFICATE_IP_ADDRESS="127.0.0.1"
+JAVA_INITIAL_HEAP="32m"
+JAVA_MAX_HEAP="192m"
+JAVA_ACTIVE_PROCESSORS="1"
+JAVA_COMPRESSED_CLASS_SPACE="64m"
+JAVA_MAX_METASPACE="192m"
+JAVA_THREAD_STACK="160k"
+PAYARA_HTTP_MAX_THREADS="4"
+PAYARA_ADMIN_MAX_THREADS="2"
+PAYARA_ORB_MAX_THREADS="4"
+PAYARA_THREAD_QUEUE_SIZE="32"
 ```
 
-## Предварительные требования
+Запуск или повторное развёртывание:
 
-На новом компьютере установите:
-
-- JDK 17 и задайте `JAVA_HOME`;
-- Maven 3.9 или новее;
-- Node.js 20 LTS и npm;
-- для локального запуска серверов: Payara 6 в `C:\Tools\payara6` и WildFly 41.0.1 в `C:\Tools\wildfly-41.0.1`.
-
-Проверьте инструменты из корня проекта:
-
-```powershell
-java -version
-mvn -version
-node --version
-npm --version
+```bash
+bash start-city-service.sh
 ```
 
-В выводе `java -version` должна быть Java 17. Если установлено несколько JDK, до сборки укажите нужную:
+Проверка:
 
-```powershell
-$env:JAVA_HOME = 'C:\Program Files\Java\jdk-17'
-$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+```bash
+curl -k -i 'https://127.0.0.1:18081/city-service/cities?page=1&size=10'
 ```
 
-## Сборка Java-сервисов и кодогенерация
+Ожидается `HTTP/2 200` (есть города) или `HTTP/2 204` (коллекция пуста).
 
-Из корня проекта выполните одну команду:
+Логи при ошибке:
 
-```powershell
-mvn clean verify
+```bash
+tail -n 100 /home/studs/s373336/payara6/glassfish/domains/soa/logs/soa-startup.log
+tail -n 100 /home/studs/s373336/payara6/glassfish/domains/soa/logs/server.log
 ```
 
-Maven автоматически выполняет всё необходимое:
+## 2. Route service: WildFly
 
-1. Берёт контракт из `openapi.yaml` в корне репозитория.
-2. Генерирует JAX-RS-контракт City service в `city-service/target/generated-openapi`.
-3. Генерирует Spring MVC-контракт Route service в `route-service/target/generated-openapi`.
-4. Компилирует код с `--release 17`.
-5. Собирает два WAR-архива.
+Запускай после успешного запуска City service.
 
-Ничего из `target/generated-openapi` вручную создавать или коммитить не нужно. Путь к спецификации относительный, поэтому кодогенерация работает после клонирования репозитория на другом компьютере.
-
-Для сборки по отдельности:
-
-```powershell
-mvn -pl city-service -am clean package
-mvn -pl route-service -am clean package
+```bash
+ssh s368420@se.ifmo.ru -p 2222
+cd /home/studs/s368420/scripts/linux
 ```
 
-После успешной сборки должны существовать файлы:
+В `config.local.sh` должны быть значения:
 
-```text
-city-service\target\city-service-1.0.0.war
-route-service\target\route-service-1.0.0.war
+```bash
+WILDFLY_HOME="/home/studs/s368420/wildfly-41.0.1"
+WILDFLY_BIND_ADDRESS="0.0.0.0"
+CITY_SERVICE_HOST="helios.se.ifmo.ru"
+CITY_SERVICE_PORT="18081"
+ROUTE_SERVICE_PORT="20000"
+ROUTE_WAR_RELATIVE_PATH="route-service-1.0.0.war"
+CITY_CERTIFICATE_FILE="/home/studs/s368420/city-service.pem"
+CERTIFICATE_DNS_NAME="helios.se.ifmo.ru"
+CERTIFICATE_IP_ADDRESS="127.0.0.1"
+JAVA_INITIAL_HEAP="32m"
+JAVA_MAX_HEAP="192m"
+JAVA_ACTIVE_PROCESSORS="1"
+JAVA_COMPRESSED_CLASS_SPACE="64m"
+JAVA_MAX_METASPACE="192m"
+JAVA_THREAD_STACK="160k"
+WILDFLY_JCA_CORE_THREADS="1"
+WILDFLY_JCA_MAX_THREADS="1"
+WILDFLY_JCA_QUEUE_LENGTH="1"
 ```
 
-## Сборка React-клиента
+Запуск или повторное развёртывание:
 
-Откройте вторую консоль в каталоге клиента:
-
-```powershell
-cd client-react
-# Если vite уже запущен, сначала остановите его в другой консоли через Ctrl+C.
-npm ci
-npm run build
+```bash
+bash start-route-service.sh
 ```
 
-Готовые статические файлы появятся в `client-react/dist`. Для разработки и проверки интерфейса используйте:
+Проверка:
 
-```powershell
-npm run dev
+```bash
+curl -k -i 'https://127.0.0.1:20000/route-service/route/calculate/to-largest'
 ```
 
-Интерфейс откроется по адресу `http://localhost:5500`. Vite перенаправляет запросы к API на HTTPS-сервисы:
+Ожидается `HTTP/2 200` с маршрутом или `HTTP/2 204`, если в City service нет подходящего города.
 
-- `/api/city` → `https://localhost:8181/city-service`;
-- `/api/route` → `https://localhost:8443/route-service`.
+Логи при ошибке:
 
-Поэтому перед проверкой клиента должны быть запущены и развёрнуты оба Java-сервиса.
-
-## Локальный запуск Java-сервисов на Windows
-
-Из корня проекта после `mvn clean verify`:
-
-```powershell
-# 1. Настройка HTTPS Payara и запуск City service
-.\scripts\configure-payara.ps1
-
-# 2. Настройка HTTPS WildFly, доверия к сертификату Payara и запуск Route service
-.\scripts\configure-wildfly.ps1
-
-# 3. Развёртывание собранных WAR
-.\scripts\deploy-services.ps1
+```bash
+tail -n 100 /home/studs/s368420/wildfly-41.0.1/standalone/log/soa-startup.log
+tail -n 100 /home/studs/s368420/wildfly-41.0.1/standalone/log/server.log
 ```
 
-Сервисы доступны только по HTTPS:
+## 3. UI
 
-- City service: `https://localhost:8181/city-service/cities`;
-- Route service: `https://localhost:8443/route-service/route/calculate/to-largest`.
+Открой `https://se.ifmo.ru/~s368420/`. Если видна старая версия, нажми `Ctrl + F5`.
 
-Сертификаты самоподписанные, поэтому браузер, Postman или другой HTTP-клиент должны доверять им. Для текущего Windows-набора серверов используйте `scripts/trust-local-certificates.ps1`.
+## Обновление WAR
 
-## Короткая последовательность на новом компьютере
+1. На ноутбуке пересобери WAR-архивы.
+2. Замени `city-service-1.0.0.war` в `/home/studs/s373336/` и выполни:
 
-```powershell
-git clone <URL-РЕПОЗИТОРИЯ>
-cd ЛР
+   ```bash
+   bash /home/studs/s373336/scripts/linux/start-city-service.sh
+   ```
 
-mvn clean verify
+3. Замени `route-service-1.0.0.war` в `/home/studs/s368420/` и выполни:
 
-cd client-react
-npm ci
-npm run build
-cd ..
+   ```bash
+   bash /home/studs/s368420/scripts/linux/start-route-service.sh
+   ```
 
-.\scripts\configure-payara.ps1
-.\scripts\configure-wildfly.ps1
-.\scripts\deploy-services.ps1
+4. Выполни проверки `curl -k` из разделов выше и открой UI.
+
+## Остановка
+
+```bash
+# аккаунт s373336
+/home/studs/s373336/payara6/bin/asadmin --port 18048 stop-domain soa
+
+# аккаунт s368420
+/home/studs/s368420/wildfly-41.0.1/bin/jboss-cli.sh --connect --command=':shutdown'
 ```
-
-Затем, в отдельной консоли:
-
-```powershell
-cd client-react
-npm run dev
-```
-
-## Проверка после сборки
-
-Проверить, что WAR собраны для Java 17, можно командой:
-
-```powershell
-javap -verbose -classpath city-service\target\classes ru.itmo.soa.city.CityApplication | Select-String 'major version'
-```
-
-Ожидаемый результат: `major version: 61`.
