@@ -1,8 +1,17 @@
 package ru.itmo.soa.city.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+
+@Embeddable
 public class Coordinates {
+    @Column(name = "coordinate_x", nullable = false)
     private Double x;
+    @Column(name = "coordinate_y", nullable = false)
     private Integer y;
+
+    protected Coordinates() {
+    }
 
     public Coordinates(Double x, Integer y) {
         this.x = x;

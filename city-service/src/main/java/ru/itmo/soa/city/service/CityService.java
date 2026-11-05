@@ -3,10 +3,7 @@ package ru.itmo.soa.city.service;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeParseException;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -15,10 +12,12 @@ import ru.itmo.soa.city.exception.CityException;
 import ru.itmo.soa.city.mapper.CityMapper;
 import ru.itmo.soa.city.model.City;
 import ru.itmo.soa.city.repository.CityRepository;
+import ru.itmo.soa.city.time.CityDateTime;
 import ru.itmo.soa.generated.city.model.AverageMetersAboveSeaLevel;
-import ru.itmo.soa.generated.city.model.Coordinates;
 import ru.itmo.soa.generated.city.model.CityInput;
+import ru.itmo.soa.generated.city.model.Coordinates;
 
+/** Business rules for City entities stored by the Hibernate repository. */
 public class CityService {
     private final CityRepository cityRepository;
 
@@ -37,8 +36,7 @@ public class CityService {
 
     public City updateCity(Integer cityId, CityInput cityInput) {
         validateCityInput(cityInput);
-        City existingCity = findCityById(cityId);
-        return cityRepository.save(CityMapper.toEntity(cityInput, existingCity));
+        return cityRepository.save(CityMapper.toEntity(cityInput, findCityById(cityId)));
     }
 
     public void deleteCity(Integer cityId) {
@@ -60,7 +58,7 @@ public class CityService {
     }
 
     public void deleteOneCityByEstablishmentDate(String establishmentDate) {
-        ZonedDateTime requestedDate = parseZonedDateTime(establishmentDate, "establishmentDate");
+        LocalDateTime requestedDate = CityDateTime.parse(establishmentDate, "establishmentDate");
         City cityToDelete = cityRepository.findAll().stream()
                 .filter(city -> requestedDate.equals(city.getEstablishmentDate()))
                 .findFirst()
@@ -83,19 +81,16 @@ public class CityService {
             Integer id, String name, String creationDate, Long area, Integer population,
             Float metersAboveSeaLevel, String establishmentDate, Boolean capital,
             ru.itmo.soa.generated.city.model.Climate climate, Double coordinatesX, Integer coordinatesY,
-            Date governorBirthday, List<String> sort, Integer page, Integer size) {
+            String governorBirthday, List<String> sort, Integer page, Integer size) {
         validateFilters(area, population, metersAboveSeaLevel, coordinatesY);
-        LocalDateTime requestedCreationDate = creationDate == null
-                ? null
-                : parseLocalDateTime(creationDate, "creationDate");
-        ZonedDateTime requestedEstablishmentDate = establishmentDate == null
-                ? null
-                : parseZonedDateTime(establishmentDate, "establishmentDate");
+        LocalDateTime requestedCreationDate = parseOptionalDate(creationDate, "creationDate");
+        LocalDateTime requestedEstablishmentDate = parseOptionalDate(establishmentDate, "establishmentDate");
+        LocalDateTime requestedGovernorBirthday = parseOptionalDate(governorBirthday, "governor.birthday");
 
         Stream<City> cities = cityRepository.findAll().stream()
                 .filter(city -> matchesFilters(city, id, name, requestedCreationDate, area, population,
                         metersAboveSeaLevel, requestedEstablishmentDate, capital, climate, coordinatesX,
-                        coordinatesY, governorBirthday));
+                        coordinatesY, requestedGovernorBirthday));
         Comparator<City> cityComparator = createComparator(sort);
         if (cityComparator != null) {
             cities = cities.sorted(cityComparator);
@@ -118,10 +113,10 @@ public class CityService {
 
     private boolean matchesFilters(
             City city, Integer id, String name, LocalDateTime creationDate, Long area, Integer population,
-            Float metersAboveSeaLevel, ZonedDateTime establishmentDate, Boolean capital,
+            Float metersAboveSeaLevel, LocalDateTime establishmentDate, Boolean capital,
             ru.itmo.soa.generated.city.model.Climate climate, Double coordinatesX, Integer coordinatesY,
-            Date governorBirthday) {
-        return (id == null || city.getId() == id)
+            LocalDateTime governorBirthday) {
+        return (id == null || city.getId().equals(id))
                 && (name == null || city.getName().toLowerCase(Locale.ROOT).startsWith(name.toLowerCase(Locale.ROOT)))
                 && (creationDate == null || city.getCreationDate().equals(creationDate))
                 && (area == null || city.getArea() == area)
@@ -154,6 +149,10 @@ public class CityService {
         }
         if (cityInput.getMetersAboveSeaLevel() == null || !Float.isFinite(cityInput.getMetersAboveSeaLevel())) {
             throw badRequest("metersAboveSeaLevel должен быть конечным числом");
+        }
+        parseOptionalDate(cityInput.getEstablishmentDate(), "establishmentDate");
+        if (cityInput.getGovernor() != null) {
+            parseOptionalDate(cityInput.getGovernor().getBirthday(), "governor.birthday");
         }
     }
 
@@ -190,20 +189,8 @@ public class CityService {
         }
     }
 
-    private LocalDateTime parseLocalDateTime(String value, String fieldName) {
-        try {
-            return LocalDateTime.parse(value);
-        } catch (DateTimeParseException exception) {
-            throw badRequest(fieldName + " должен иметь формат yyyy-MM-ddTHH:mm:ss");
-        }
-    }
-
-    private ZonedDateTime parseZonedDateTime(String value, String fieldName) {
-        try {
-            return ZonedDateTime.parse(value);
-        } catch (DateTimeParseException exception) {
-            throw badRequest(fieldName + " должен иметь формат yyyy-MM-ddTHH:mm:ss+03:00[Europe/Moscow]");
-        }
+    private LocalDateTime parseOptionalDate(String value, String fieldName) {
+        return value == null || value.isBlank() ? null : CityDateTime.parse(value, fieldName);
     }
 
     private Comparator<City> createComparator(List<String> sortValues) {

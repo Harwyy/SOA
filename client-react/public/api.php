@@ -5,7 +5,7 @@ declare(strict_types=1);
 // application APIs below are available; it is not an open proxy.
 $targets = [
     'city' => 'https://helios.se.ifmo.ru:18081/city-service',
-    'route' => 'https://helios.se.ifmo.ru:20000/route-service',
+    'route' => 'https://127.0.0.1:20000/route-service',
 ];
 
 $service = $_GET['service'] ?? '';

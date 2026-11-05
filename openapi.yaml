@@ -5,25 +5,26 @@ info:
     REST API для управления коллекцией городов и расчёта маршрутов.
     Первый сервис реализуется на JAX-RS и разворачивается на Payara.
     Второй сервис реализуется на Spring MVC REST, разворачивается на WildFly
-    и вызывает первый сервис по HTTP в локальной конфигурации.
+    и вызывает первый сервис по HTTPS. Даты и время передаются в российском
+    пользовательском формате `ДД.ММ.ГГГГ ЧЧ:ММ`.
   version: 1.0.0
 
 servers:
-  - url: http://localhost:8080/city-service
-    description: JAX-RS сервис на Payara для локального запуска.
+  - url: https://localhost:8181/city-service
+    description: JAX-RS сервис на Payara; в локальном режиме используется self-signed TLS.
 
 x-deployment:
-  transport: HTTP
-  httpAllowed: true
-  certificate: Не используется в локальном режиме
+  transport: HTTPS
+  httpAllowed: false
+  certificate: Self-signed в учебном окружении, сертификат City добавлен в truststore Route
   firstService:
     framework: JAX-RS
     applicationServer: Payara
-    baseUrl: http://localhost:8080/city-service
+    baseUrl: https://localhost:8181/city-service
   secondService:
     framework: Spring MVC REST
     applicationServer: WildFly
-    baseUrl: http://localhost:8081/route
+    baseUrl: https://localhost:8443/route-service
 
 tags:
   - name: Cities
@@ -260,8 +261,8 @@ paths:
 
   /route/calculate/to-largest:
     servers:
-      - url: http://localhost:8081
-        description: Spring MVC REST сервис на WildFly для локального запуска.
+      - url: https://localhost:8443/route-service
+        description: Spring MVC REST сервис на WildFly с self-signed TLS для локального запуска.
     get:
       tags: [Routes]
       operationId: calculateRouteToLargestCity
@@ -285,8 +286,8 @@ paths:
 
   /route/calculate/to-oldest:
     servers:
-      - url: http://localhost:8081
-        description: Spring MVC REST сервис на WildFly для локального запуска.
+      - url: https://localhost:8443/route-service
+        description: Spring MVC REST сервис на WildFly с self-signed TLS для локального запуска.
     get:
       tags: [Routes]
       operationId: calculateRouteToOldestCity
@@ -341,7 +342,8 @@ components:
       description: Точное совпадение с локальной датой и временем создания
       schema:
         type: string
-        format: date-time
+        pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+        example: '01.01.2020 12:00'
     FilterArea:
       name: area
       in: query
@@ -368,11 +370,11 @@ components:
     FilterEstablishmentDate:
       name: establishmentDate
       in: query
-      description: Точное совпадение с датой и временем основания с часовым поясом
+      description: Точное совпадение с датой и временем основания в формате ДД.ММ.ГГГГ ЧЧ:ММ
       schema:
         type: string
-        format: date-time
-        example: '2020-01-01T12:00:00+03:00[Europe/Moscow]'
+        pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+        example: '01.01.2020 12:00'
     FilterCapital:
       name: capital
       in: query
@@ -406,7 +408,8 @@ components:
       description: Точное совпадение с датой рождения губернатора
       schema:
         type: string
-        format: date-time
+        pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+        example: '01.01.2020 12:00'
     Sort:
       name: sort
       in: query
@@ -456,8 +459,8 @@ components:
       description: Дата и время основания для удаления
       schema:
         type: string
-        format: date-time
-        example: '2020-01-01T12:00:00+03:00[Europe/Moscow]'
+        pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+        example: '01.01.2020 12:00'
 
   schemas:
     City:
@@ -481,7 +484,8 @@ components:
           $ref: '#/components/schemas/Coordinates'
         creationDate:
           type: string
-          format: date-time
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+          example: '01.01.2020 12:00'
           readOnly: true
           x-generated: true
           description: Дата создания, генерируемая автоматически.
@@ -501,9 +505,9 @@ components:
           description: Высота над уровнем моря.
         establishmentDate:
           type: [string, 'null']
-          format: date-time
-          example: '2020-01-01T12:00:00+03:00[Europe/Moscow]'
-          description: Дата и время основания с часовым поясом.
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+          example: '01.01.2020 12:00'
+          description: Дата и время основания в формате ДД.ММ.ГГГГ ЧЧ:ММ.
         capital:
           type: boolean
           description: Является ли город столицей.
@@ -541,8 +545,8 @@ components:
           format: float
         establishmentDate:
           type: [string, 'null']
-          format: date-time
-          example: '2020-01-01T12:00:00+03:00[Europe/Moscow]'
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+          example: '01.01.2020 12:00'
         capital:
           type: boolean
           default: false
@@ -577,8 +581,9 @@ components:
       properties:
         birthday:
           type: [string, 'null']
-          format: date-time
-          description: Дата и время рождения.
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$'
+          example: '01.01.2020 12:00'
+          description: Дата и время рождения в формате ДД.ММ.ГГГГ ЧЧ:ММ.
 
     Climate:
       type: string

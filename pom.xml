@@ -16,6 +16,8 @@
     <jakartaee.version>10.0.0</jakartaee.version>
     <spring.version>6.2.3</spring.version>
     <jackson.version>2.18.2</jackson.version>
+    <hibernate.version>6.6.59.Final</hibernate.version>
+    <postgresql.version>42.7.14</postgresql.version>
   </properties>
   <build>
     <plugins>

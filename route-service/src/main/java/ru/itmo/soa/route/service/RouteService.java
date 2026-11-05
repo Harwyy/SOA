@@ -1,7 +1,9 @@
 package ru.itmo.soa.route.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -10,6 +12,9 @@ import ru.itmo.soa.route.client.CityServiceClient;
 
 @Service
 public class RouteService {
+    private static final DateTimeFormatter RUSSIAN_DATE_TIME = DateTimeFormatter
+            .ofPattern("dd.MM.uuuu HH:mm")
+            .withResolverStyle(ResolverStyle.STRICT);
     private final CityServiceClient cityServiceClient;
 
     public RouteService(CityServiceClient cityServiceClient) {
@@ -29,7 +34,8 @@ public class RouteService {
         List<JsonNode> cities = cityServiceClient.getAllCities();
         return cities.stream()
                 .filter(this::hasEstablishmentDateAndCoordinates)
-                .min(Comparator.comparing(city -> ZonedDateTime.parse(city.path("establishmentDate").asText())))
+                .min(Comparator.comparing(city -> LocalDateTime.parse(
+                        city.path("establishmentDate").asText(), RUSSIAN_DATE_TIME)))
                 .map(this::createRouteResult)
                 .orElse(null);
     }

@@ -1,19 +1,26 @@
 package ru.itmo.soa.city.model;
 
-import java.util.Date;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+import java.time.LocalDateTime;
 
+@Embeddable
 public class Human {
-    private Date birthday;
+    @Column(name = "governor_birthday")
+    private LocalDateTime birthday;
 
-    public Human(Date birthday) {
+    protected Human() {
+    }
+
+    public Human(LocalDateTime birthday) {
         this.birthday = birthday;
     }
 
-    public Date getBirthday() {
+    public LocalDateTime getBirthday() {
         return birthday;
     }
 
-    public void setBirthday(Date birthday) {
+    public void setBirthday(LocalDateTime birthday) {
         this.birthday = birthday;
     }
 }

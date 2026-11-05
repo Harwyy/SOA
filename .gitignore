@@ -6,8 +6,12 @@
 **/node_modules/
 client-react/dist/
 
+# Per-account deployment configuration (paths and host-specific limits).
+scripts/**/config.local.sh
+
 # IDE and operating system files
 .idea/
 *.iml
 .DS_Store
 Thumbs.db
+client-react

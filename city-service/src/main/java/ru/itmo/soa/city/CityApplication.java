@@ -5,6 +5,7 @@ import jakarta.ws.rs.core.Application;
 import java.util.Set;
 import ru.itmo.soa.city.controller.CityController;
 import ru.itmo.soa.city.exception.CityExceptionMapper;
+import ru.itmo.soa.city.exception.CityStorageExceptionMapper;
 import ru.itmo.soa.city.exception.RequestProcessingExceptionMapper;
 import ru.itmo.soa.city.exception.ValidationExceptionMapper;
 import ru.itmo.soa.city.filter.CityRequestTypeFilter;
@@ -16,6 +17,7 @@ public class CityApplication extends Application {
         return Set.of(
                 CityController.class,
                 CityExceptionMapper.class,
+                CityStorageExceptionMapper.class,
                 RequestProcessingExceptionMapper.class,
                 ValidationExceptionMapper.class,
                 CityRequestTypeFilter.class,

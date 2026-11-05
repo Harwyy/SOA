@@ -1,26 +1,51 @@
 package ru.itmo.soa.city.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
 
+@Entity
+@Table(name = "cities")
 public class City {
-    private int id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
+    @Column(nullable = false)
     private String name;
+    @Embedded
     private Coordinates coordinates;
+    @Column(name = "creation_date", nullable = false, updatable = false)
     private LocalDateTime creationDate;
+    @Column(nullable = false)
     private long area;
+    @Column(nullable = false)
     private int population;
+    @Column(name = "meters_above_sea_level", nullable = false)
     private float metersAboveSeaLevel;
-    private ZonedDateTime establishmentDate;
+    @Column(name = "establishment_date")
+    private LocalDateTime establishmentDate;
+    @Column(nullable = false)
     private boolean capital;
+    @Enumerated(EnumType.STRING)
     private Climate climate;
+    @Embedded
     private Human governor;
 
-    public int getId() {
+    public City() {
+    }
+
+    public Integer getId() {
         return id;
     }
 
-    public void setId(int id) {
+    public void setId(Integer id) {
         this.id = id;
     }
 
@@ -72,11 +97,11 @@ public class City {
         this.metersAboveSeaLevel = metersAboveSeaLevel;
     }
 
-    public ZonedDateTime getEstablishmentDate() {
+    public LocalDateTime getEstablishmentDate() {
         return establishmentDate;
     }
 
-    public void setEstablishmentDate(ZonedDateTime establishmentDate) {
+    public void setEstablishmentDate(LocalDateTime establishmentDate) {
         this.establishmentDate = establishmentDate;
     }
 

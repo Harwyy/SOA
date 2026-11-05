@@ -1,0 +1,7 @@
+# Do not commit credentials. Set these as JVM system properties or environment variables.
+# JVM properties have priority: -Dcity.db.url=... -Dcity.db.user=... -Dcity.db.password=...
+# Environment fallback: CITY_DB_URL, CITY_DB_USER, CITY_DB_PASSWORD.
+city.db.url=jdbc:postgresql://db-host:5432/city_service
+city.db.user=city_service
+city.db.password=replace-me
+city.db.schema-mode=update

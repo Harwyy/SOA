@@ -1,198 +1,66 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ApiError } from './api/httpClient.js';
 import {
-  ApiError,
-  calculateRoute,
-  createCity,
-  deleteByEstablishmentDate,
-  deleteByMeters,
-  deleteCity,
-  fetchAverage,
-  fetchCities,
-  getCity,
-  updateCity
-} from './api.js';
+  createCity, getAverageMeters, getCity, listCities, removeCitiesByMeters,
+  removeCity, removeCityByEstablishmentDate, updateCity
+} from './api/cityService.js';
+import { calculateRoute } from './api/routeService.js';
+import { Feedback } from './components/Feedback.jsx';
+import { CityFilters } from './features/cities/CityFilters.jsx';
+import { CityForm } from './features/cities/CityForm.jsx';
+import { cityToForm, emptyCityFilters, emptyCityForm } from './features/cities/cityForm.js';
+import { CityTable } from './features/cities/CityTable.jsx';
+import { OperationsPanel } from './features/operations/OperationsPanel.jsx';
+import { RoutesPanel } from './features/routes/RoutesPanel.jsx';
 
-const PAGE_SIZE_OPTIONS = [5, 10, 25, 50, 100];
-const DATE_TIME_PLACEHOLDER = 'гггг-мм-дд чч:мм';
-const SORT_FIELDS = [
-  ['id', 'ID'],
-  ['name', 'Название'],
-  ['area', 'Площадь'],
-  ['population', 'Население'],
-  ['metersAboveSeaLevel', 'Высота'],
-  ['establishmentDate', 'Дата основания'],
-  ['capital', 'Столица'],
-  ['climate', 'Климат'],
-  ['coordinates.x', 'X'],
-  ['coordinates.y', 'Y'],
-  ['governor.birthday', 'День рождения губернатора'],
-  ['creationDate', 'Создана']
-];
+const pageSizes = [5, 10, 25, 50, 100];
 
-const emptyFilters = {
-  id: '', name: '', creationDate: '', area: '', population: '', metersAboveSeaLevel: '',
-  establishmentDate: '', capital: '', climate: '', coordinatesX: '', coordinatesY: '', governorBirthday: ''
-};
-
-const emptyForm = {
-  name: '', coordinatesX: '', coordinatesY: '', area: '', population: '', metersAboveSeaLevel: '',
-  establishmentDate: '', capital: false, climate: '', governorBirthday: ''
-};
-
-function parseDate(value) {
-  if (!value) return null;
-  const normalized = String(value).replace(/\[[^\]]+\]$/, '');
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? null : date;
+function errorFor(error) {
+  return error instanceof ApiError
+    ? error
+    : new ApiError(0, error?.message || 'Произошла непредвиденная ошибка');
 }
 
-function pad(value, length = 2) {
-  return String(value).padStart(length, '0');
-}
-
-function formatDateParts(date, separator = ' ') {
-  return [
-    `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
-    `${pad(date.getHours())}:${pad(date.getMinutes())}`
-  ].join(separator);
-}
-
-function hasTimezone(value) {
-  return /[zZ]|[+-]\d{2}:\d{2}/.test(String(value));
-}
-
-function formatDateTime(value) {
-  if (!value) return '—';
-
-  const raw = String(value);
-  if (!hasTimezone(raw)) {
-    const localDateTime = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
-    if (localDateTime) return `${localDateTime[1]} ${localDateTime[2]}`;
-  }
-
-  const date = parseDate(value);
-  return date ? formatDateParts(date) : '—';
-}
-
-function formatLocalDate(value) {
-  if (!value) return '';
-
-  const raw = String(value);
-  if (!hasTimezone(raw)) {
-    const localDateTime = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
-    if (localDateTime) return `${localDateTime[1]} ${localDateTime[2]}`;
-  }
-
-  const date = parseDate(value);
-  return date ? formatDateParts(date) : '';
-}
-
-function formatNumber(value, digits = 2) {
-  return value === null || value === undefined ? '—' : Number(value).toLocaleString('ru-RU', { maximumFractionDigits: digits });
-}
-
-function cityToForm(city) {
-  return {
-    name: city.name || '',
-    coordinatesX: city.coordinates?.x ?? '',
-    coordinatesY: city.coordinates?.y ?? '',
-    area: city.area ?? '',
-    population: city.population ?? '',
-    metersAboveSeaLevel: city.metersAboveSeaLevel ?? '',
-    establishmentDate: formatLocalDate(city.establishmentDate),
-    capital: Boolean(city.capital),
-    climate: city.climate || '',
-    governorBirthday: city.governor?.birthday ? formatLocalDate(city.governor.birthday) : ''
-  };
-}
-
-function getErrorMessage(error) {
-  if (error instanceof ApiError) {
-    return { title: error.message, details: error.details };
-  }
-  return { title: error?.message || 'Произошла непредвиденная ошибка', details: [] };
-}
-
-function App() {
+export default function App() {
+  const [tab, setTab] = useState('cities');
   const [cities, setCities] = useState([]);
-  const [filters, setFilters] = useState(emptyFilters);
+  const [filters, setFilters] = useState(emptyCityFilters);
   const [sort, setSort] = useState([]);
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
-  const [totalHint, setTotalHint] = useState(0);
-  const [activeTab, setActiveTab] = useState('collection');
   const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState(emptyCityForm);
+  const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
-  const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(emptyForm);
   const [lookupId, setLookupId] = useState('');
   const [lookupCity, setLookupCity] = useState(null);
-  const [metersForDelete, setMetersForDelete] = useState('');
-  const [dateForDelete, setDateForDelete] = useState('');
+  const [meters, setMeters] = useState('');
+  const [date, setDate] = useState('');
   const [average, setAverage] = useState(null);
   const [routeResults, setRouteResults] = useState({});
 
-  const showError = useCallback((exception) => {
-    setNotice('');
-    setError(getErrorMessage(exception));
-  }, []);
-
+  const showError = useCallback((exception) => { setNotice(''); setError(errorFor(exception)); }, []);
   const loadCities = useCallback(async () => {
     setLoading(true);
-    try {
-      const result = await fetchCities({ filters, sort, page, size });
-      setCities(result);
-      setTotalHint(result.length);
-      setError(null);
-    } catch (exception) {
-      showError(exception);
-    } finally {
-      setLoading(false);
-    }
+    try { setCities(await listCities({ filters, sort, page, size })); setError(null); }
+    catch (exception) { showError(exception); }
+    finally { setLoading(false); }
   }, [filters, page, showError, size, sort]);
 
   useEffect(() => { loadCities(); }, [loadCities]);
 
-  useEffect(() => {
-    if (!error && !notice) return undefined;
-    const timeout = window.setTimeout(() => {
-      setError(null);
-      setNotice('');
-    }, 3000);
-    return () => window.clearTimeout(timeout);
-  }, [error, notice]);
-
-  const totalPages = useMemo(() => {
-    if (cities.length < size && page === 1) return 1;
-    return cities.length < size ? page : page + 1;
-  }, [cities.length, page, size]);
-
-  function updateFilter(key, value) {
-    setFilters((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateForm(key, value) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function submitFilters(event) {
-    event.preventDefault();
-    setPage(1);
-  }
-
-  function resetFilters() {
-    setFilters(emptyFilters);
-    setSort([]);
-    setPage(1);
-  }
+  const totalPages = useMemo(() => cities.length < size ? Math.max(1, page) : page + 1, [cities.length, page, size]);
+  const updateForm = (name, value) => setForm((current) => ({ ...current, [name]: value }));
+  const updateFilter = (name, value) => setFilters((current) => ({ ...current, [name]: value }));
+  const finish = async (message) => { setNotice(message); setError(null); await loadCities(); };
 
   function toggleSort(field) {
     setSort((current) => {
-      const existing = current.find((criterion) => criterion.startsWith(`${field},`));
-      if (!existing) return [...current, `${field},asc`];
-      if (existing.endsWith(',asc')) return current.map((criterion) => criterion === existing ? `${field},desc` : criterion);
-      return current.filter((criterion) => criterion !== existing);
+      const active = current.find((criterion) => criterion.startsWith(`${field},`));
+      if (!active) return [...current, `${field},asc`];
+      if (active.endsWith(',asc')) return current.map((criterion) => criterion === active ? `${field},desc` : criterion);
+      return current.filter((criterion) => criterion !== active);
     });
     setPage(1);
   }
@@ -200,217 +68,33 @@ function App() {
   async function saveCity(event) {
     event.preventDefault();
     try {
-      if (editingId === null) {
-        await createCity(form);
-        setNotice('Город успешно создан');
-      } else {
-        await updateCity(editingId, form);
-        setNotice(`Город #${editingId} обновлён`);
-      }
-      setError(null);
-      cancelEdit();
-      await loadCities();
-    } catch (exception) {
-      showError(exception);
-    }
+      if (editingId === null) await createCity(form); else await updateCity(editingId, form);
+      setForm(emptyCityForm); setEditingId(null);
+      await finish(editingId === null ? 'Город успешно создан' : `Город #${editingId} обновлён`);
+    } catch (exception) { showError(exception); }
   }
 
-  function startEdit(city) {
-    setEditingId(city.id);
-    setForm(cityToForm(city));
-    setActiveTab('collection');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  function editCity(city) { setForm(cityToForm(city)); setEditingId(city.id); setTab('cities'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  async function deleteCity(id) { if (window.confirm(`Удалить город #${id}?`)) { try { await removeCity(id); await finish(`Город #${id} удалён`); } catch (exception) { showError(exception); } } }
+  async function lookup(event) { event.preventDefault(); try { setLookupCity(await getCity(lookupId)); setError(null); } catch (exception) { setLookupCity(null); showError(exception); } }
+  async function special(action, message) { try { await action(); await finish(message); } catch (exception) { showError(exception); } }
+  async function route(kind) { try { const result = await calculateRoute(kind); const city = result ? await getCity(result.cityId).catch(() => null) : null; setRouteResults((current) => ({ ...current, [kind]: result ? { ...result, city } : null })); setError(null); } catch (exception) { showError(exception); } }
 
-  function cancelEdit() {
-    setEditingId(null);
-    setForm(emptyForm);
-  }
-
-  async function removeCity(id) {
-    if (!window.confirm(`Удалить город #${id}?`)) return;
-    try {
-      await deleteCity(id);
-      setNotice(`Город #${id} удалён`);
-      setError(null);
-      await loadCities();
-    } catch (exception) {
-      showError(exception);
-    }
-  }
-
-  async function findCity(event) {
-    event.preventDefault();
-    if (!lookupId) return;
-    try {
-      setLookupCity(await getCity(lookupId));
-      setError(null);
-    } catch (exception) {
-      setLookupCity(null);
-      showError(exception);
-    }
-  }
-
-  async function runSpecialAction(action, successMessage) {
-    try {
-      await action();
-      setNotice(successMessage);
-      setError(null);
-      await loadCities();
-    } catch (exception) {
-      showError(exception);
-    }
-  }
-
-  async function loadAverage() {
-    try {
-      const result = await fetchAverage();
-      setAverage(result?.averageMetersAboveSeaLevel ?? null);
-      setError(null);
-      if (!result) setNotice('В коллекции нет городов с указанной высотой');
-    } catch (exception) {
-      showError(exception);
-    }
-  }
-
-  async function loadRoute(kind) {
-    try {
-      const result = await calculateRoute(kind);
-      const city = result ? await getCity(result.cityId).catch(() => null) : null;
-      setRouteResults((current) => ({ ...current, [kind]: result ? { ...result, city } : null }));
-      setError(null);
-    } catch (exception) {
-      showError(exception);
-    }
-  }
-
-  return (
-    <main className="app-shell">
-      <header className="hero">
-        <div>
-          <h1>Города</h1>
-        </div>
-      </header>
-
-      {(error || notice) && <Feedback error={error} notice={notice} onClose={() => { setError(null); setNotice(''); }} />}
-
-      <nav className="tabs" aria-label="Разделы приложения">
-        <button className={activeTab === 'collection' ? 'tab active' : 'tab'} onClick={() => setActiveTab('collection')}>Коллекция</button>
-        <button className={activeTab === 'operations' ? 'tab active' : 'tab'} onClick={() => setActiveTab('operations')}>Операции</button>
-        <button className={activeTab === 'routes' ? 'tab active' : 'tab'} onClick={() => setActiveTab('routes')}>Маршруты</button>
-      </nav>
-
-      {activeTab === 'collection' ? (
-        <>
-          <section className="dashboard-grid">
-            <section className="panel collection-panel">
-              <div className="section-heading">
-                <div><h2>Коллекция городов</h2></div>
-                <button className="button secondary" onClick={loadCities} disabled={loading}>{loading ? 'Загрузка…' : 'Обновить'}</button>
-              </div>
-              <FilterPanel filters={filters} onChange={updateFilter} onSubmit={submitFilters} onReset={resetFilters} />
-              <CityTable cities={cities} sort={sort} onSort={toggleSort} onEdit={startEdit} onDelete={removeCity} />
-              <Pagination page={page} size={size} totalPages={totalPages} onPage={setPage} onSize={(value) => { setSize(Number(value)); setPage(1); }} count={totalHint} />
-            </section>
-            <div className="side-stack">
-              <CityForm form={form} editingId={editingId} onChange={updateForm} onSubmit={saveCity} onCancel={cancelEdit} />
-            </div>
-          </section>
-        </>
-      ) : activeTab === 'operations' ? (
-        <OperationsPanel
-          lookupId={lookupId}
-          setLookupId={setLookupId}
-          lookupCity={lookupCity}
-          onFind={findCity}
-          onEdit={startEdit}
-          meters={metersForDelete}
-          setMeters={setMetersForDelete}
-          date={dateForDelete}
-          setDate={setDateForDelete}
-          average={average}
-          onDeleteMeters={() => runSpecialAction(() => deleteByMeters(metersForDelete), 'Города с заданной высотой удалены')}
-          onDeleteDate={() => runSpecialAction(() => deleteByEstablishmentDate(dateForDelete), 'Город с заданной датой основания удалён')}
-          onAverage={loadAverage}
-        />
-      ) : (
-        <RoutesPanel results={routeResults} onCalculate={loadRoute} />
-      )}
-    </main>
-  );
+  return <main className="app-shell">
+    <header className="hero"><h1>Города</h1></header>
+    <Feedback error={error} notice={notice} onClose={() => { setError(null); setNotice(''); }} />
+    <nav className="tabs" aria-label="Разделы приложения">
+      <button type="button" className={tab === 'cities' ? 'tab active' : 'tab'} onClick={() => setTab('cities')}>Коллекция</button>
+      <button type="button" className={tab === 'operations' ? 'tab active' : 'tab'} onClick={() => setTab('operations')}>Операции</button>
+      <button type="button" className={tab === 'routes' ? 'tab active' : 'tab'} onClick={() => setTab('routes')}>Маршруты</button>
+    </nav>
+    {tab === 'cities' && <section className="dashboard-grid"><section className="panel collection-panel">
+      <div className="section-heading"><div><h2>Коллекция городов</h2></div><button type="button" className="button secondary" onClick={loadCities} disabled={loading}>{loading ? 'Загрузка…' : 'Обновить'}</button></div>
+      <CityFilters filters={filters} onChange={updateFilter} onSubmit={(event) => { event.preventDefault(); setPage(1); }} onReset={() => { setFilters(emptyCityFilters); setSort([]); setPage(1); }} />
+      <CityTable cities={cities} sort={sort} onSort={toggleSort} onEdit={editCity} onDelete={deleteCity} />
+      <div className="pagination"><label>Размер <select value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(1); }}>{pageSizes.map((option) => <option key={option}>{option}</option>)}</select></label><button type="button" className="button ghost" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Назад</button><strong>Страница {page}</strong><button type="button" className="button ghost" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Вперёд →</button></div>
+    </section><CityForm form={form} editingId={editingId} onChange={updateForm} onSubmit={saveCity} onCancel={() => { setForm(emptyCityForm); setEditingId(null); }} /></section>}
+    {tab === 'operations' && <OperationsPanel lookupId={lookupId} onLookupIdChange={setLookupId} lookupCity={lookupCity} onLookup={lookup} meters={meters} onMetersChange={setMeters} date={date} onDateChange={setDate} average={average} onEdit={editCity} onDeleteByMeters={() => special(() => removeCitiesByMeters(meters), 'Города с заданной высотой удалены')} onDeleteByDate={() => special(() => removeCityByEstablishmentDate(date), 'Город с заданной датой основания удалён')} onAverage={async () => { try { const result = await getAverageMeters(); setAverage(result?.averageMetersAboveSeaLevel ?? null); setError(null); } catch (exception) { showError(exception); } }} />}
+    {tab === 'routes' && <RoutesPanel results={routeResults} onCalculate={route} />}
+  </main>;
 }
-
-function Feedback({ error, notice, onClose }) {
-  return <div className={error ? 'feedback error toast' : 'feedback success toast'} role="status">
-    <div><strong>{error ? 'Ошибка запроса' : 'Готово'}</strong><p>{error?.title || notice}</p>{error?.details?.length > 0 && <ul>{error.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>}</div>
-    <button aria-label="Закрыть уведомление" onClick={onClose}>×</button>
-  </div>;
-}
-
-function CityForm({ form, editingId, onChange, onSubmit, onCancel }) {
-  return <form className="panel city-form" onSubmit={onSubmit}>
-    <div className="section-heading"><div><h2>{editingId === null ? 'Добавить город' : `Редактировать город #${editingId}`}</h2></div>{editingId !== null && <button type="button" className="icon-button" onClick={onCancel}>×</button>}</div>
-    <div className="form-grid">
-      <label>Название<input required minLength="1" value={form.name} onChange={(e) => onChange('name', e.target.value)} /></label>
-      <label>Площадь<input required type="number" min="1" step="1" value={form.area} onChange={(e) => onChange('area', e.target.value)} /></label>
-      <label>Население<input required type="number" min="1" step="1" value={form.population} onChange={(e) => onChange('population', e.target.value)} /></label>
-      <label>Высота над уровнем моря<input required type="number" step="any" value={form.metersAboveSeaLevel} onChange={(e) => onChange('metersAboveSeaLevel', e.target.value)} /></label>
-      <label>Координата X<input required type="number" step="any" value={form.coordinatesX} onChange={(e) => onChange('coordinatesX', e.target.value)} /></label>
-      <label>Координата Y<input required type="number" max="952" step="1" value={form.coordinatesY} onChange={(e) => onChange('coordinatesY', e.target.value)} /></label>
-      <label>Дата основания<input type="text" inputMode="numeric" placeholder={DATE_TIME_PLACEHOLDER} pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}" value={form.establishmentDate} onChange={(e) => onChange('establishmentDate', e.target.value)} /></label>
-      <label>День рождения губернатора<input type="text" inputMode="numeric" placeholder={DATE_TIME_PLACEHOLDER} pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}" value={form.governorBirthday} onChange={(e) => onChange('governorBirthday', e.target.value)} /></label>
-      <label>Климат<select value={form.climate} onChange={(e) => onChange('climate', e.target.value)}><option value="">Не указан</option><option>RAIN_FOREST</option><option>TROPICAL_SAVANNA</option><option>HUMIDCONTINENTAL</option></select></label>
-      <label className="checkbox-label"><input type="checkbox" checked={form.capital} onChange={(e) => onChange('capital', e.target.checked)} /> Столица</label>
-    </div>
-    <button className="button primary" type="submit">{editingId === null ? 'Создать город' : 'Сохранить изменения'}</button>
-  </form>;
-}
-
-function LookupCard({ lookupId, setLookupId, lookupCity, onSubmit, onEdit }) {
-  return <section className="panel compact-card"><div className="section-heading"><div><h2>Найти город</h2></div></div><form className="inline-form" onSubmit={onSubmit}><input required min="1" type="number" placeholder="ID города" value={lookupId} onChange={(e) => setLookupId(e.target.value)} /><button className="button secondary">Найти</button></form>{lookupCity && <div className="lookup-result"><strong>#{lookupCity.id} · {lookupCity.name}</strong><span>{formatNumber(lookupCity.area)} км² · население {formatNumber(lookupCity.population, 0)}</span><button className="text-button" onClick={() => onEdit(lookupCity)}>Открыть в форме</button></div>}</section>;
-}
-
-function SpecialOperations({ meters, setMeters, date, setDate, average, onDeleteMeters, onDeleteDate, onAverage }) {
-  return <section className="panel compact-card"><div className="section-heading"><div><h2>Операции коллекции</h2></div></div><div className="operation"><label>Удалить по высоте<input type="number" step="any" value={meters} onChange={(e) => setMeters(e.target.value)} placeholder="metersAboveSeaLevel" /></label><button className="button danger" disabled={!meters} onClick={onDeleteMeters}>Удалить все</button></div><div className="operation"><label>Удалить по дате основания<input type="text" inputMode="numeric" placeholder={DATE_TIME_PLACEHOLDER} pattern="[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}" value={date} onChange={(e) => setDate(e.target.value)} /></label><button className="button danger" disabled={!date} onClick={onDeleteDate}>Удалить один</button></div><div className="average-row"><button className="button secondary" onClick={onAverage}>Рассчитать среднее</button><strong>{average === null ? '—' : `${formatNumber(average)} м`}</strong></div></section>;
-}
-
-function OperationsPanel({ lookupId, setLookupId, lookupCity, onFind, onEdit, meters, setMeters, date, setDate, average, onDeleteMeters, onDeleteDate, onAverage }) {
-  return <section className="operations-view">
-    <div className="section-heading"><div><h2>Операции с коллекцией</h2></div></div>
-    <div className="operations-grid">
-      <LookupCard lookupId={lookupId} setLookupId={setLookupId} lookupCity={lookupCity} onSubmit={onFind} onEdit={onEdit} />
-      <SpecialOperations meters={meters} setMeters={setMeters} date={date} setDate={setDate} average={average} onDeleteMeters={onDeleteMeters} onDeleteDate={onDeleteDate} onAverage={onAverage} />
-    </div>
-  </section>;
-}
-
-function FilterPanel({ filters, onChange, onSubmit, onReset }) {
-  return <form className="filters" onSubmit={onSubmit}><div className="filter-grid"><Filter label="ID" value={filters.id} onChange={(v) => onChange('id', v)} /><Filter label="Название (с начала)" value={filters.name} onChange={(v) => onChange('name', v)} placeholder="Например, Моск" /><Filter label="Создана" value={filters.creationDate} onChange={(v) => onChange('creationDate', v)} placeholder={DATE_TIME_PLACEHOLDER} /><Filter label="Площадь" value={filters.area} onChange={(v) => onChange('area', v)} /><Filter label="Население" value={filters.population} onChange={(v) => onChange('population', v)} /><Filter label="Высота" value={filters.metersAboveSeaLevel} onChange={(v) => onChange('metersAboveSeaLevel', v)} /><Filter label="Основан" value={filters.establishmentDate} onChange={(v) => onChange('establishmentDate', v)} placeholder={DATE_TIME_PLACEHOLDER} /><Filter label="Столица" type="select" value={filters.capital} onChange={(v) => onChange('capital', v)} options={[['', 'Все'], ['true', 'Да'], ['false', 'Нет']]} /><Filter label="Климат" type="select" value={filters.climate} onChange={(v) => onChange('climate', v)} options={[['', 'Все'], ['RAIN_FOREST', 'RAIN_FOREST'], ['TROPICAL_SAVANNA', 'TROPICAL_SAVANNA'], ['HUMIDCONTINENTAL', 'HUMIDCONTINENTAL']]} /><Filter label="Координата X" value={filters.coordinatesX} onChange={(v) => onChange('coordinatesX', v)} /><Filter label="Координата Y" value={filters.coordinatesY} onChange={(v) => onChange('coordinatesY', v)} /><Filter label="Губернатор" value={filters.governorBirthday} onChange={(v) => onChange('governorBirthday', v)} placeholder={DATE_TIME_PLACEHOLDER} /></div><div className="filter-actions"><button className="button primary">Применить фильтры</button><button type="button" className="button ghost" onClick={onReset}>Сбросить</button></div></form>;
-}
-
-function Filter({ label, value, onChange, type = 'text', options, placeholder }) {
-  return <label className="filter-field">{label}{type === 'select' ? <select value={value} onChange={(e) => onChange(e.target.value)}>{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select> : <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />}</label>;
-}
-
-function CityTable({ cities, sort, onSort, onEdit, onDelete }) {
-  const sortMark = (field) => { const criterion = sort.find((item) => item.startsWith(`${field},`)); return criterion ? criterion.endsWith(',asc') ? ' ↑' : ' ↓' : ''; };
-  return <div className="table-wrap"><table><thead><tr><th>Действия</th>{SORT_FIELDS.map(([field, label]) => <th key={field}><button className="sort-button" onClick={() => onSort(field)}>{label}{sortMark(field)}</button></th>)}</tr></thead><tbody>{cities.length === 0 ? <tr><td colSpan="13" className="empty-state">Нет объектов на текущей странице</td></tr> : cities.map((city) => <tr key={city.id}><td className="actions"><button className="text-button" onClick={() => onEdit(city)}>Изменить</button><button className="text-button danger-text" onClick={() => onDelete(city.id)}>Удалить</button></td><td>{city.id}</td><td>{city.name}</td><td>{formatNumber(city.area)}</td><td>{formatNumber(city.population, 0)}</td><td>{formatNumber(city.metersAboveSeaLevel)}</td><td>{formatDateTime(city.establishmentDate)}</td><td>{city.capital ? 'Да' : 'Нет'}</td><td>{city.climate || '—'}</td><td>{city.coordinates?.x ?? '—'}</td><td>{city.coordinates?.y ?? '—'}</td><td>{formatDateTime(city.governor?.birthday)}</td><td>{formatDateTime(city.creationDate)}</td></tr>)}</tbody></table></div>;
-}
-
-function Pagination({ page, size, totalPages, onPage, onSize, count }) {
-  return <div className="pagination"><span>На странице: {count}</span><label>Размер<select value={size} onChange={(e) => onSize(e.target.value)}>{PAGE_SIZE_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label><button className="button ghost" disabled={page <= 1} onClick={() => onPage(page - 1)}>← Назад</button><strong>Страница {page}</strong><button className="button ghost" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>Вперёд →</button></div>;
-}
-
-function RoutesPanel({ results, onCalculate }) {
-  const cards = [
-    ['to-largest', 'До самого большого города', 'Город с максимальной площадью'],
-    ['to-oldest', 'До самого старого города', 'От точки (0, 0, 0) до минимальной даты основания']
-  ];
-  return <section className="routes-view"><div className="section-heading"><div><h2>Расчёт маршрутов</h2></div></div><div className="route-grid">{cards.map(([kind, title, description]) => {
-    const result = results[kind];
-    const city = result?.city;
-    return <article className="route-card" key={kind}><div className="route-icon">⌁</div><h3>{title}</h3><p>{description}</p><button className="button primary" onClick={() => onCalculate(kind)}>Рассчитать маршрут</button>{result && <div className="route-result"><div className="route-city"><span>Маршрут до города</span><strong>{city?.name || `Город #${result.cityId}`}</strong></div><div className="route-stats"><div><span>Длина</span><b>{formatNumber(result.length, 4)} ед.</b></div><div><span>ID</span><b>#{result.cityId}</b></div>{city && <><div><span>Площадь</span><b>{formatNumber(city.area)} км²</b></div><div><span>Население</span><b>{formatNumber(city.population, 0)} чел.</b></div></>}</div>{city?.coordinates && <small>Координаты: {city.coordinates.x}; {city.coordinates.y}</small>}</div>}{result === null && <div className="empty-route">Подходящих городов нет</div>}</article>;
-  })}</div></section>;
-}
-
-export default App;

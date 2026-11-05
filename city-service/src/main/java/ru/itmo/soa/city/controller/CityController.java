@@ -91,7 +91,7 @@ public class CityController {
             @QueryParam("climate") Climate climate,
             @QueryParam("coordinates.x") Double coordinatesX,
             @QueryParam("coordinates.y") Integer coordinatesY,
-            @QueryParam("governor.birthday") java.util.Date governorBirthday,
+            @QueryParam("governor.birthday") String governorBirthday,
             @QueryParam("sort") List<String> sort,
             @QueryParam("page") @DefaultValue("1") Integer page,
             @QueryParam("size") @DefaultValue("10") Integer size) {
